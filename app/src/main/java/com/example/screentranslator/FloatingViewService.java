@@ -52,22 +52,49 @@ public class FloatingViewService extends Service {
     private RequestQueue requestQueue;
     private final Map<TextBlockInfo, TextView> overlayMap = new HashMap<>();
     private final int CAPTURE_INTERVAL_MS = 5000;
+    private Bitmap previousBitmap = null;
+
+
+//    private final Runnable captureRunnable = new Runnable() {
+//        @Override
+//        public void run() {
+//            ScreenshotHelper.capture((bitmap, width, height) -> {
+//                if (bitmap != null) {
+//                    Log.d("Capture", "Captured successfully: " + width + "x" + height);
+//                    sendImageToServer(bitmap, width, height);
+//                } else {
+//                    Log.e("Capture", "Failed to capture screen (bitmap is null)");
+//                }
+//            });
+//
+//            mainHandler.postDelayed(this, CAPTURE_INTERVAL_MS);
+//        }
+//    };
 
     private final Runnable captureRunnable = new Runnable() {
         @Override
         public void run() {
-            ScreenshotHelper.capture((bitmap, width, height) -> {
-                if (bitmap != null) {
-                    Log.d("Capture", "Captured successfully: " + width + "x" + height);
-                    sendImageToServer(bitmap, width, height);
-                } else {
-                    Log.e("Capture", "Failed to capture screen (bitmap is null)");
-                }
+            hideOverlaysTemporarily(() -> {
+                ScreenshotHelper.capture((bitmap, width, height) -> {
+                    if (bitmap != null) {
+                        if (isBitmapDifferent(bitmap, previousBitmap)) {
+                            previousBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, false);
+                            Log.d("Capture", "Detected screen change, sending to server...");
+                            sendImageToServer(bitmap, width, height);
+                        } else {
+                            Log.d("Capture", "Screen unchanged, skipping API call.");
+                        }
+                    } else {
+                        Log.e("Capture", "Failed to capture screen (bitmap is null)");
+                    }
+                });
             });
 
             mainHandler.postDelayed(this, CAPTURE_INTERVAL_MS);
         }
     };
+
+
 
     @Override
     public void onCreate() {
@@ -152,28 +179,6 @@ public class FloatingViewService extends Service {
             return;
         }
 
-//        JsonObjectRequest request = new JsonObjectRequest(Request.Method.POST, url, body,
-//                response -> {
-//                    try {
-//                        JSONArray resultArray = new JSONArray(response.toString());
-//                        clearOverlays();
-//
-//                        for (int i = 0; i < resultArray.length(); i++) {
-//                            JSONObject item = resultArray.getJSONObject(i);
-//                            String text = item.getString("translated");
-//                            int x = item.getInt("x");
-//                            int y = item.getInt("y");
-//                            int width = item.getInt("width");
-//                            int height = item.getInt("height");
-//
-//                            showOverlayText(text, x, y, bitmapWidth, bitmapHeight);
-//                        }
-//                    } catch (Exception e) {
-//                        Log.e("API", "Error parsing translation result", e);
-//                    }
-//                },
-//                error -> Log.e("API", "Failed to get translation response", error)
-//        );
         JsonArrayPostRequest request = new JsonArrayPostRequest(
                 Request.Method.POST, url, body,
                 response -> {
@@ -201,47 +206,6 @@ public class FloatingViewService extends Service {
 
     }
 
-//    private void showOverlayText(String text, int left, int top, int bitmapWidth, int bitmapHeight) {
-//        TextView textView = new TextView(this);
-//        textView.setText(text);
-//        textView.setTextSize(14);
-//        textView.setTextColor(0xFFFFFFFF);
-//        textView.setBackgroundColor(0xAA000000);
-//        textView.setPadding(20, 10, 20, 10);
-//
-//        int screenWidth = Resources.getSystem().getDisplayMetrics().widthPixels;
-//        int screenHeight = Resources.getSystem().getDisplayMetrics().heightPixels;
-//
-//        float scaleX = (float) screenWidth / bitmapWidth;
-//        float scaleY = (float) screenHeight / bitmapHeight;
-//
-//        int adjustedX = Math.round(left * scaleX);
-//        int adjustedY = Math.round(top * scaleY);
-//
-//        Log.d("Overlay", "Adding overlay at x=" + adjustedX + ", y=" + adjustedY + ", text=" + text);
-//
-//        WindowManager.LayoutParams params = new WindowManager.LayoutParams(
-//                WindowManager.LayoutParams.WRAP_CONTENT,
-//                WindowManager.LayoutParams.WRAP_CONTENT,
-//                Build.VERSION.SDK_INT >= Build.VERSION_CODES.O ?
-//                        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY :
-//                        WindowManager.LayoutParams.TYPE_PHONE,
-//                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE |
-//                        WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-//                PixelFormat.TRANSLUCENT
-//        );
-//
-//        params.gravity = Gravity.TOP | Gravity.START;
-//        params.x = adjustedX;
-//        params.y = adjustedY;
-//
-//        try {
-//            windowManager.addView(textView, params);
-//            overlayMap.put(new TextBlockInfo(text, adjustedX, adjustedY), textView);
-//        } catch (Exception e) {
-//            Log.e("Overlay", "Failed to add overlay", e);
-//        }
-//    }
     private void showOverlayText(String text, int left, int top, int bitmapWidth, int bitmapHeight) {
         TextView textView = new TextView(this);
         textView.setText(text);
@@ -329,4 +293,43 @@ public class FloatingViewService extends Service {
     public IBinder onBind(Intent intent) {
         return null;
     }
+
+    private boolean isBitmapDifferent(Bitmap current, Bitmap previous) {
+        if (current == null || previous == null) return true;
+        if (current.getWidth() != previous.getWidth() || current.getHeight() != previous.getHeight())
+            return true;
+
+        int width = current.getWidth();
+        int height = current.getHeight();
+
+        int[] pixelsCurrent = new int[width * height];
+        int[] pixelsPrevious = new int[width * height];
+
+        current.getPixels(pixelsCurrent, 0, width, 0, 0, width, height);
+        previous.getPixels(pixelsPrevious, 0, width, 0, 0, width, height);
+
+        int differentPixels = 0;
+        for (int i = 0; i < pixelsCurrent.length; i++) {
+            if (pixelsCurrent[i] != pixelsPrevious[i]) {
+                differentPixels++;
+                if (differentPixels > 1000) return true; // nếu có hơn 1000 pixel khác thì coi là khác
+            }
+        }
+
+        return false;
+    }
+
+    private void hideOverlaysTemporarily(Runnable afterHidden) {
+        for (TextView view : overlayMap.values()) {
+            view.setAlpha(0f); // Làm trong suốt
+        }
+
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            afterHidden.run(); // Gọi sau khi overlay đã ẩn hoàn toàn
+            for (TextView view : overlayMap.values()) {
+                view.setAlpha(1f); // Hiện lại
+            }
+        }, 500); // Delay ngắn để đảm bảo overlay đã bị ẩn khỏi ảnh chụp
+    }
+
 }
