@@ -9,6 +9,7 @@ import android.media.projection.MediaProjection;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.DisplayMetrics;
+import android.util.Log;
 import android.view.WindowManager;
 import android.hardware.display.VirtualDisplay;
 
@@ -25,7 +26,17 @@ public class ScreenshotHelper {
     }
 
     public static void init(Context context, MediaProjection mediaProjection) {
-        if (initialized) return;
+        if (initialized) {
+            // clear old resources if re-init
+            if (virtualDisplay != null) {
+                virtualDisplay.release();
+                virtualDisplay = null;
+            }
+            if (imageReader != null) {
+                imageReader.close();
+                imageReader = null;
+            }
+        }
 
         DisplayMetrics metrics = new DisplayMetrics();
         WindowManager wm = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
@@ -66,70 +77,72 @@ public class ScreenshotHelper {
         initialized = true;
     }
 
-//    public static void capture(ScreenshotCallback callback) {
-//        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-//            if (imageReader == null) {
-//                callback.onScreenshot(null, 0, 0);
-//                return;
-//            }
-//
-//            Image image = imageReader.acquireLatestImage();
+    public static void capture(ScreenshotCallback callback) {
+        if (!initialized || imageReader == null) {
+            postResult(callback, null, 0, 0);
+            return;
+        }
+
+        new Thread(() -> {
+            Image image = null;
+            int retries = 5;
+
+            while (retries-- > 0 && image == null) {
+                image = imageReader.acquireLatestImage();
+                if (image == null) {
+                    try {
+                        Thread.sleep(100); // đợi thêm frame
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                        break;
+                    }
+                }
+            }
+
 //            if (image != null) {
 //                int width = image.getWidth();
 //                int height = image.getHeight();
-//
 //                Image.Plane[] planes = image.getPlanes();
 //                ByteBuffer buffer = planes[0].getBuffer();
 //                int pixelStride = planes[0].getPixelStride();
 //                int rowStride = planes[0].getRowStride();
 //                int rowPadding = rowStride - pixelStride * width;
 //
-//                Bitmap bitmap = Bitmap.createBitmap(
-//                        width + rowPadding / pixelStride,
-//                        height,
-//                        Bitmap.Config.ARGB_8888
-//                );
+//                int bitmapWidth = width + rowPadding / pixelStride;
+//                if (bitmapWidth <= 0 || height <= 0) {
+//                    image.close();
+//                    postResult(callback, null, 0, 0);
+//                    return;
+//                }
+//
+//                Bitmap bitmap = Bitmap.createBitmap(bitmapWidth, height, Bitmap.Config.ARGB_8888);
 //                bitmap.copyPixelsFromBuffer(buffer);
 //                image.close();
 //
+//                // Cắt về kích thước chuẩn
 //                Bitmap cropped = Bitmap.createBitmap(bitmap, 0, 0, width, height);
-//                callback.onScreenshot(cropped, width, height);
-//            } else {
-//                callback.onScreenshot(null, 0, 0);
+//                postResult(callback, cropped, width, height);
 //            }
-//        }, 300); // nhỏ lại delay là đủ
-//    }
-    public static void capture(ScreenshotCallback callback) {
-        new Thread(() -> {
-            if (imageReader == null) {
-                new Handler(Looper.getMainLooper()).post(() -> callback.onScreenshot(null, 0, 0));
-                return;
-            }
-
-            Image image = imageReader.acquireLatestImage();
             if (image != null) {
                 int width = image.getWidth();
                 int height = image.getHeight();
                 Image.Plane[] planes = image.getPlanes();
                 ByteBuffer buffer = planes[0].getBuffer();
-                int pixelStride = planes[0].getPixelStride();
-                int rowStride = planes[0].getRowStride();
-                int rowPadding = rowStride - pixelStride * width;
 
-                Bitmap bitmap = Bitmap.createBitmap(
-                        width + rowPadding / pixelStride,
-                        height,
-                        Bitmap.Config.ARGB_8888
-                );
+                Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
                 bitmap.copyPixelsFromBuffer(buffer);
                 image.close();
 
-                Bitmap cropped = Bitmap.createBitmap(bitmap, 0, 0, width, height);
-                new Handler(Looper.getMainLooper()).post(() -> callback.onScreenshot(cropped, width, height));
+                Log.d("Bitmap", "Captured bitmap size: " + bitmap.getWidth() + "x" + bitmap.getHeight());
+
+                postResult(callback, bitmap, width, height);
             } else {
-                new Handler(Looper.getMainLooper()).post(() -> callback.onScreenshot(null, 0, 0));
+                postResult(callback, null, 0, 0);
             }
         }).start();
     }
 
+    private static void postResult(ScreenshotCallback callback, Bitmap bitmap, int width, int height) {
+        new Handler(Looper.getMainLooper()).post(() -> callback.onScreenshot(bitmap, width, height));
+    }
 }
