@@ -66,6 +66,8 @@ def ocr_translate(req: OCRRequest):
 
             # Dịch văn bản
             translated_text = translation.translate(full_text)
+            
+            print(translated_text)
 
             # Tính toán bounding box cho văn bản
             min_x = min(w["x"] for w in words)

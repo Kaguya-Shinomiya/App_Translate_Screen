@@ -20,10 +20,16 @@ import android.util.Base64;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.Gravity;
+import android.view.LayoutInflater;
+import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.view.WindowMetrics;
+import android.widget.ImageButton;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
@@ -53,27 +59,20 @@ public class FloatingViewService extends Service {
     private final Map<TextBlockInfo, TextView> overlayMap = new HashMap<>();
     private final int CAPTURE_INTERVAL_MS = 5000;
     private Bitmap previousBitmap = null;
+    private View bubbleView;
+    private boolean isPaused = false;
 
 
-//    private final Runnable captureRunnable = new Runnable() {
-//        @Override
-//        public void run() {
-//            ScreenshotHelper.capture((bitmap, width, height) -> {
-//                if (bitmap != null) {
-//                    Log.d("Capture", "Captured successfully: " + width + "x" + height);
-//                    sendImageToServer(bitmap, width, height);
-//                } else {
-//                    Log.e("Capture", "Failed to capture screen (bitmap is null)");
-//                }
-//            });
-//
-//            mainHandler.postDelayed(this, CAPTURE_INTERVAL_MS);
-//        }
-//    };
 
     private final Runnable captureRunnable = new Runnable() {
         @Override
         public void run() {
+            if (isPaused) {
+                Log.d("Service", "Paused, skipping capture.");
+                mainHandler.postDelayed(this, CAPTURE_INTERVAL_MS);
+                return;
+            }
+
             hideOverlaysTemporarily(() -> {
                 ScreenshotHelper.capture((bitmap, width, height) -> {
                     if (bitmap != null) {
@@ -96,6 +95,7 @@ public class FloatingViewService extends Service {
 
 
 
+
     @Override
     public void onCreate() {
         super.onCreate();
@@ -104,7 +104,8 @@ public class FloatingViewService extends Service {
         windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
         mainHandler = new Handler(Looper.getMainLooper());
         requestQueue = Volley.newRequestQueue(this);
-        // captureRunnable sẽ được gọi sau khi init xong MediaProjection trong onStartCommand()
+
+        initFloatingBubble(); // <-- Thêm dòng này
     }
 
     @Override
@@ -153,7 +154,7 @@ public class FloatingViewService extends Service {
         Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle("Screen Translator đang chạy")
                 .setContentText("Đang dịch nội dung trên màn hình...")
-                .setSmallIcon(R.drawable.ic_notification)
+                .setSmallIcon(R.drawable.notification)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .build();
 
@@ -227,11 +228,6 @@ public class FloatingViewService extends Service {
         int adjustedX = Math.round(left * scaleX);
         int adjustedY = Math.round(top * scaleY);
 
-//        Log.d("Overlay", "Adding overlay at x=" + adjustedX + ", y=" + adjustedY + ", text=" + text);
-
-        Log.d("Overlay", "Screen: " + screenWidth + "x" + screenHeight);
-        Log.d("Overlay", "Bitmap: " + bitmapWidth + "x" + bitmapHeight);
-        Log.d("Overlay", "ScaleX: " + scaleX + ", ScaleY: " + scaleY);
 
 
         WindowManager.LayoutParams params = new WindowManager.LayoutParams(
@@ -312,7 +308,7 @@ public class FloatingViewService extends Service {
         for (int i = 0; i < pixelsCurrent.length; i++) {
             if (pixelsCurrent[i] != pixelsPrevious[i]) {
                 differentPixels++;
-                if (differentPixels > 1000) return true; // nếu có hơn 1000 pixel khác thì coi là khác
+                if (differentPixels > 1500) return true; // nếu có hơn 1000 pixel khác thì coi là khác
             }
         }
 
@@ -324,12 +320,75 @@ public class FloatingViewService extends Service {
             view.setAlpha(0f); // Làm trong suốt
         }
 
+        if (bubbleView != null) {
+            bubbleView.setAlpha(0f); // Ẩn bubble chính luôn
+        }
+
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            afterHidden.run(); // Gọi sau khi overlay đã ẩn hoàn toàn
+            afterHidden.run(); // Gọi sau khi overlay đã bị ẩn
             for (TextView view : overlayMap.values()) {
                 view.setAlpha(1f); // Hiện lại
+            }
+            if (bubbleView != null) {
+                bubbleView.setAlpha(1f); // Hiện lại bubble
             }
         }, 500); // Delay ngắn để đảm bảo overlay đã bị ẩn khỏi ảnh chụp
     }
 
+    private void initFloatingBubble() {
+        bubbleView = LayoutInflater.from(this).inflate(R.layout.floating_bubble, null);
+
+        WindowManager.LayoutParams params = new WindowManager.LayoutParams(
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.O ?
+                        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY :
+                        WindowManager.LayoutParams.TYPE_PHONE,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                PixelFormat.TRANSLUCENT);
+
+        params.gravity = Gravity.TOP | Gravity.START;
+        params.x = 100;
+        params.y = 300;
+
+        windowManager.addView(bubbleView, params);
+
+        ImageView btnMain = bubbleView.findViewById(R.id.btnMain);
+        LinearLayout menuButtons = bubbleView.findViewById(R.id.menuButtons);
+
+        btnMain.setOnClickListener(v -> {
+            if (menuButtons.getVisibility() == View.VISIBLE) {
+                menuButtons.setVisibility(View.GONE);
+            } else {
+                menuButtons.setVisibility(View.VISIBLE);
+            }
+        });
+
+        ImageButton btnPause = bubbleView.findViewById(R.id.Pause);
+        btnPause.setOnClickListener(v -> {
+            isPaused = !isPaused;
+
+            if (isPaused) {
+                Toast.makeText(this, "Stop Translate", Toast.LENGTH_SHORT).show();
+                btnPause.setBackgroundResource(R.drawable.play); // icon phát lại
+            } else {
+                Toast.makeText(this, "Continue Tranlate", Toast.LENGTH_SHORT).show();
+                btnPause.setBackgroundResource(R.drawable.pause); // icon tạm dừng
+            }
+        });
+
+
+        bubbleView.findViewById(R.id.btnStop).setOnClickListener(v -> {
+            // Dừng service
+            stopSelf();
+
+            // Gỡ bubble
+            if (windowManager != null && bubbleView != null) {
+                windowManager.removeView(bubbleView);
+            }
+
+            // Thoát app
+            new Handler(Looper.getMainLooper()).postDelayed(() -> System.exit(0), 300);
+        });
+    }
 }

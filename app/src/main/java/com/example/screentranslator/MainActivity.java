@@ -60,6 +60,23 @@ public class MainActivity extends AppCompatActivity {
                 requestMediaProjection(); // xin quyền media projection
             }
         });
+
+
+        Button btnStop = findViewById(R.id.btnStop);
+        btnStop.setOnClickListener(v -> {
+            // Dừng service
+            Intent stopIntent = new Intent(MainActivity.this, FloatingViewService.class);
+            stopService(stopIntent);
+
+            // Thoát toàn bộ ứng dụng
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                finishAndRemoveTask(); // Đóng và xoá khỏi recent apps
+            } else {
+                finish(); // Đóng activity
+            }
+
+            System.exit(0); // Đảm bảo dừng toàn bộ process (cẩn thận nếu có task khác)
+        });
     }
 
     private void requestMediaProjection() {
