@@ -17,7 +17,7 @@ Install Python: https://www.python.org/downloads/
 * Recommend: Python >= 3.10
 
 Intall python library:
-    pip install fastapi uvicorn argostranslate pillow pytesseract
+        pip install fastapi uvicorn argostranslate pillow pytesseract
 
 # How to run:
 * Start the server
