@@ -104,41 +104,39 @@ public class ScreenshotHelper {
 //                int height = image.getHeight();
 //                Image.Plane[] planes = image.getPlanes();
 //                ByteBuffer buffer = planes[0].getBuffer();
-//                int pixelStride = planes[0].getPixelStride();
-//                int rowStride = planes[0].getRowStride();
-//                int rowPadding = rowStride - pixelStride * width;
 //
-//                int bitmapWidth = width + rowPadding / pixelStride;
-//                if (bitmapWidth <= 0 || height <= 0) {
-//                    image.close();
-//                    postResult(callback, null, 0, 0);
-//                    return;
-//                }
-//
-//                Bitmap bitmap = Bitmap.createBitmap(bitmapWidth, height, Bitmap.Config.ARGB_8888);
+//                Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
 //                bitmap.copyPixelsFromBuffer(buffer);
 //                image.close();
 //
-//                // Cắt về kích thước chuẩn
-//                Bitmap cropped = Bitmap.createBitmap(bitmap, 0, 0, width, height);
-//                postResult(callback, cropped, width, height);
+//                Log.d("Bitmap", "Captured bitmap size: " + bitmap.getWidth() + "x" + bitmap.getHeight());
+//
+//                postResult(callback, bitmap, width, height);
+//            } else {
+//                postResult(callback, null, 0, 0);
 //            }
             if (image != null) {
                 int width = image.getWidth();
                 int height = image.getHeight();
                 Image.Plane[] planes = image.getPlanes();
                 ByteBuffer buffer = planes[0].getBuffer();
+                int pixelStride = planes[0].getPixelStride();
+                int rowStride = planes[0].getRowStride();
+                int rowPadding = rowStride - pixelStride * width;
 
-                Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+                Bitmap bitmap = Bitmap.createBitmap(width + rowPadding / pixelStride, height, Bitmap.Config.ARGB_8888);
                 bitmap.copyPixelsFromBuffer(buffer);
+
+                Bitmap croppedBitmap = Bitmap.createBitmap(bitmap, 0, 0, width, height);
                 image.close();
 
-                Log.d("Bitmap", "Captured bitmap size: " + bitmap.getWidth() + "x" + bitmap.getHeight());
+                Log.d("Bitmap", "Captured bitmap size: " + croppedBitmap.getWidth() + "x" + croppedBitmap.getHeight());
 
-                postResult(callback, bitmap, width, height);
+                postResult(callback, croppedBitmap, width, height);
             } else {
                 postResult(callback, null, 0, 0);
             }
+
         }).start();
     }
 

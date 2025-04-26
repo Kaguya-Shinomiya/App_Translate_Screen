@@ -38,6 +38,8 @@ def ocr_translate(req: OCRRequest):
         image_data = base64.b64decode(req.image_base64)
         image = Image.open(io.BytesIO(image_data))
 
+        #print(image_data)
+        image.show() 
         # OCR với pytesseract, trả về dict từng dòng/từ
         ocr_data = pytesseract.image_to_data(image, lang="jpn", output_type=pytesseract.Output.DICT)
 
