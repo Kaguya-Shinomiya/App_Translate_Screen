@@ -16,7 +16,7 @@ Install Android Studio:
 Install Python: https://www.python.org/downloads/
 * Recommend: Python >= 3.10
 
-Intall python library:
+    Intall python library:
         pip install fastapi uvicorn argostranslate pillow pytesseract
 
 # How to run:
