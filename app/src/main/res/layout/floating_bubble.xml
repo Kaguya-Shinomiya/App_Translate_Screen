@@ -1,0 +1,48 @@
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/bubble_container"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:padding="8dp">
+
+    <!-- Nút tròn chính -->
+    <!--        android:src="@drawable/circle_background"-->
+    <!-- Các nút nhỏ (ẩn lúc đầu) -->
+    <ImageView
+        android:id="@+id/btnMain"
+        android:layout_width="60dp"
+        android:layout_height="60dp"
+        android:layout_gravity="center"
+
+        android:background="@drawable/circle_background"
+        android:scaleType="center"
+        android:alpha="0.6"/>
+
+    <LinearLayout
+        android:id="@+id/menuButtons"
+        android:orientation="horizontal"
+        android:visibility="gone"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="70dp">
+
+        <ImageButton
+            android:id="@+id/Pause"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/pause"
+            android:alpha="0.6"
+            />
+        <!--            android:src="@drawable/ic_a" -->
+
+
+        <ImageButton
+            android:id="@+id/btnStop"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/stop"
+            android:alpha="0.6"
+            />
+        <!--            android:src="@drawable/ic_c" -->
+    </LinearLayout>
+</FrameLayout>
